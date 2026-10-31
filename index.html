@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Bench — same tasks, same criteria, fair compare</title>
+  <style>
+    :root {
+      --bg: #f7f3ea;
+      --panel: #fffdf7;
+      --panel-2: #f3eddd;
+      --line: #e3dac4;
+      --text: #332f26;
+      --muted: #8a8271;
+      --accent: #0f766e;
+      --good: #047857;
+      --bad: #dc2626;
+      --warn: #b45309;
+      --border-radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background:
+        repeating-linear-gradient(0deg, transparent 0 31px, rgba(190, 175, 135, .16) 31px 32px),
+        linear-gradient(160deg, #fdfaf3, var(--bg));
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+    .topbar {
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(253, 250, 243, .88);
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 5;
+    }
+    .logo { width: 40px; height: 40px; display: grid; place-items: center; font-size: 22px;
+      background: #fdf6e6; border: 1px solid var(--line); border-radius: 10px; }
+    .topbar h1 { font-size: 19px; font-family: Georgia, "Times New Roman", serif; letter-spacing: .3px; }
+    .topbar p { font-size: 12px; color: var(--muted); }
+
+    main { flex: 1; width: min(1050px, 92vw); margin: 20px auto; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--border-radius); padding: 14px 18px; box-shadow: 0 1px 3px rgba(120, 105, 70, .08); }
+    .card h2 { font-size: 16px; margin-bottom: 10px; }
+    .card h3 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
+
+    .hidden { display: none !important; }
+
+    .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+    .suite-list { display: flex; flex-direction: column; gap: 6px; }
+    .suite-item {
+      border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+      background: var(--panel-2); cursor: pointer; font-family: inherit; font-size: 13px; text-align: left; color: var(--text);
+      transition: all .12s ease;
+    }
+    .suite-item:hover { border-color: var(--accent); }
+    .suite-item.selected { border-color: var(--accent); background: rgba(15, 118, 110, .07); }
+    .suite-item b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+    .suite-item span { font-size: 12px; color: var(--muted); line-height: 1.4; display: block; }
+    .model-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    #model-select {
+      width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      padding: 8px 10px; border-radius: 8px; font-size: 13px; font-family: inherit; margin-bottom: 8px;
+      cursor: pointer;
+    }
+    #model-select:focus { outline: none; border-color: var(--accent); }
+    .picked-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; margin: 6px 0 5px; display: none; }
+    .picked-label.show { display: block; }
+    .model-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 5px 10px; background: var(--panel-2);
+      font-size: 12.5px; cursor: pointer; user-select: none; color: var(--text); font-family: inherit;
+      transition: all .12s ease;
+    }
+    .model-chip:hover { border-color: var(--accent); }
+    .model-chip.selected { background: rgba(15, 118, 110, .09); border-color: var(--accent); }
+    .model-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .model-chip.selected .dot { background: var(--good); }
+    label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+    .custom-row { display: flex; gap: 6px; margin-top: 4px; }
+    .custom-row input {
+      flex: 1; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      padding: 8px 10px; border-radius: 8px; font-size: 13px; font-family: inherit;
+    }
+    .btn {
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+      padding: 8px 14px; border-radius: 8px; font-size: 13px;
+      transition: all .12s ease;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .run-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .run-row .meta { font-size: 12px; color: var(--muted); flex: 1; text-align: right; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px;
+    }
+    .model-card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); padding: 10px 12px; }
+    .model-card.err { border-color: var(--bad); }
+    .model-card .name { font-size: 12.5px; font-weight: 600; color: var(--accent); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .model-card .score { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .model-card .score.good { color: var(--good); }
+    .model-card .score.mid { color: var(--warn); }
+    .model-card .score.bad { color: var(--bad); }
+    .model-card .sub { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+    .model-card .bar { height: 5px; border-radius: 3px; background: #eadfc6; margin: 7px 0; overflow: hidden; }
+    .model-card .bar > div { height: 100%; border-radius: 3px; }
+    .bar > .b-good { background: var(--good); }
+    .bar > .b-mid { background: var(--warn); }
+    .bar > .b-bad { background: var(--bad); }
+
+    .task { margin-bottom: 10px; }
+    .task-head {
+      display: flex; align-items: center; gap: 10px; padding: 9px 10px; cursor: pointer;
+      border-radius: 8px; list-style: none; user-select: none;
+    }
+    .task-head::-webkit-details-marker { display: none; }
+    .task-head:hover { background: var(--panel-2); }
+    .task-head b { font-size: 13.5px; }
+    .task-head .prompt-preview { flex: 1; font-size: 12px; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cell { border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); padding: 9px 11px; margin-bottom: 7px; }
+    .cell-top { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+    .cell-model { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+    .cell-meta { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+    .cell-score { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+    .s-good { color: var(--good); background: rgba(4, 120, 87, .1); }
+    .s-mid { color: var(--warn); background: rgba(180, 83, 9, .1); }
+    .s-bad { color: var(--bad); background: rgba(220, 38, 38, .09); }
+    .output { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; color: #4a4335;
+      background: #faf6e9; border: 1px dashed #d8cdae; border-radius: 7px; padding: 8px 10px; margin-bottom: 7px; font-family: ui-monospace, monospace; }
+    .crit { display: flex; flex-wrap: wrap; gap: 5px; }
+    .crit-chip { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid; }
+    .crit-chip.pass { color: var(--good); border-color: rgba(4, 120, 87, .4); background: rgba(4, 120, 87, .06); }
+    .crit-chip.fail { color: var(--bad); border-color: rgba(220, 38, 38, .4); background: rgba(220, 38, 38, .05); }
+    .crit-chip small { font-weight: 600; }
+    .cell-error { color: var(--bad); font-size: 12px; font-family: ui-monospace, monospace; }
+    .workspace-note { font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .ref-list { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: #6d6553; }
+    .ref-task b { color: var(--text); font-size: 12.5px; }
+    .ref-crit { margin: 2px 0 0 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .ref-crit .weight { color: var(--accent); font-family: ui-monospace, monospace; }
+    .ref-criteria em { color: #5d5644; font-style: normal; }
+    @media (max-width: 760px) { .config-grid { grid-template-columns: 1fr; } }
+    .grade-top { display: flex; align-items: end; gap: 10px; margin-bottom: 8px; }
+    #grade-task { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+      color: var(--text); font-family: inherit; font-size: 13px; max-width: 360px; }
+    .grade-top label { margin-bottom: 5px; display: block; }
+    .grade-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grade-name { width: 100%; margin-bottom: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--panel-2); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; }
+    .grade-in { width: 100%; min-height: 120px; padding: 8px 10px; border: 1px dashed #d8cdae; border-radius: 8px;
+      background: #faf6e9; color: #4a4335; font-family: ui-monospace, monospace; font-size: 12.5px; resize: vertical; }
+    .grade-cell { border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); padding: 10px 12px; margin-top: 10px; }
+    .grade-cell.win { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(15, 118, 110, .1); }
+    .grade-cell-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+    .grade-cell-head span { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); }
+    .grade-winner { color: var(--accent); font-size: 11.5px; margin-bottom: 6px; font-weight: 600; }
+    .grade-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .crit-chip em { font-style: normal; opacity: .75; margin-left: 3px; }
+    @media (max-width: 760px) { .grade-grid { grid-template-columns: 1fr; } }
+    .how-steps { margin: 4px 0 12px 22px; line-height: 1.85; font-size: 13.5px; color: #6d6553; }
+    .how-steps b { color: var(--text); }
+    .how-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+    .how-table th, .how-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); color: #5d5644; }
+    .how-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    .how-table code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; font-size: 12px; color: var(--accent); }
+    .how-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+    details.how-card summary { cursor: pointer; list-style: none; user-select: none; }
+    details.how-card summary::-webkit-details-marker { display: none; }
+    details.how-card summary h2::before { content: "▸ "; color: var(--accent); }
+    details.how-card[open] summary h2::before { content: "▾ "; }
+    footer { text-align: center; color: var(--muted); font-size: 11.5px; padding: 14px 0 22px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">🔬</div>
+    <div><h1>LLM Bench</h1><p>Identical tasks · identical criteria · every model judged by the same rules</p></div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="config-grid">
+        <div>
+          <label>Benchmark suite</label>
+          <div class="suite-list" id="suite-list"></div>
+        </div>
+        <div>
+          <label>Models to compare</label>
+          <select id="model-select"><option value="">Loading models…</option></select>
+          <p class="picked-label" id="picked-label">Selected — click a chip to remove it</p>
+          <div class="model-list" id="model-list"></div>
+          <p class="how-note" id="model-hint" style="margin: 2px 0 6px;"></p>
+          <div class="custom-row">
+            <input id="custom-model" placeholder="Model ID not listed? Type it and hit Add" spellcheck="false" />
+            <button class="btn ghost" id="add-model">Add model</button>
+          </div>
+          <div class="run-row">
+            <button class="btn primary" id="run-btn" disabled>Run benchmark</button>
+            <span class="meta" id="run-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="grade-card">
+      <h2>Grade two answers head-to-head — Opus vs anybody, free</h2>
+      <p class="workspace-note" style="margin-bottom:10px;">Pick a task, paste each model's reply, and the identical checklist grades both instantly. No API, no account, no payment.</p>
+      <div class="grade-top">
+        <div>
+          <label for="grade-task">Task to grade</label>
+          <select id="grade-task"></select>
+        </div>
+        <button class="btn primary" id="grade-btn">Grade side by side</button>
+      </div>
+      <div class="grade-grid">
+        <div>
+          <input class="grade-name" id="grade-name-a" value="Opus" spellcheck="false" />
+          <textarea class="grade-in" id="grade-in-a" rows="6" placeholder="Paste the first model's answer to that task here…"></textarea>
+        </div>
+        <div>
+          <input class="grade-name" id="grade-name-b" value="Astra" spellcheck="false" />
+          <textarea class="grade-in" id="grade-in-b" rows="6" placeholder="Paste the second model's answer here…"></textarea>
+        </div>
+      </div>
+      <div id="grade-out" class="hidden"></div>
+    </div>
+
+    <details class="card how-card" open>
+      <summary><h2>How it works</h2></summary>
+      <ol class="how-steps">
+        <li><b>Same task paper to everyone.</b> Pick a suite and models, hit Run — every model answers the <em>exact same prompts</em>, compiled locally in fractions of a second.</li>
+        <li><b>Deterministic scoring, no judge model.</b> Every response is run through that suite's fixed checklist — a mechanical pass/fail per criterion, with hand-tuned weights. Nothing subjective, nothing vibe-based.</li>
+        <li><b>The score is explained.</b> A score of 36% means "the checks it passed were worth 36 points." Click any task to read the model's raw output and see exactly which checks it hit and missed.</li>
+        <li><b>Errors are honest.</b> A missing sample response is recorded as an error cell, never silently as a zero — problems are flagged on the model card.</li>
+        <li><b>Free & offline.</b> Built-in sample models, local scoring, nothing to install, no account — the samples run forever at zero cost from this plain Node server. Want live LLMs like Opus or Astra in the same benchmark? Add an API key in <code>.env</code> and those models appear next to the samples; real calls use your key's credits, everything else stays free.</li>
+      </ol>
+      <table class="how-table">
+        <thead><tr><th>Check type</th><th>What it verifies</th></tr></thead>
+        <tbody>
+          <tr><td><code>exact</code></td><td>normalized reply must equal the value (e.g. "391")</td></tr>
+          <tr><td><code>containsAll</code> / <code>containsAny</code></td><td>all / any of the listed strings appear</td></tr>
+          <tr><td><code>absent</code></td><td>must <em>not</em> match — commas, "0.10", the letter e</td></tr>
+          <tr><td><code>regex</code></td><td>structural shape — one sentence, ascending order, nothing but the list</td></tr>
+          <tr><td><code>minWords</code> / <code>maxWords</code></td><td>word-count floor and cap</td></tr>
+          <tr><td><code>json</code></td><td>parses as JSON with all required keys</td></tr>
+        </tbody>
+      </table>
+      <p class="how-note">The full prompt and checklist for every task are printed in <b>The scoring rubric</b> card below — read them before trusting any number. Same tasks, same criteria, every model. That's the whole fairness claim.</p>
+    </details>
+
+    <div class="card hidden" id="summary-wrap">
+      <h2>Suite results</h2>
+      <div class="summary" id="summary"></div>
+    </div>
+
+    <div class="card hidden" id="task-wrap">
+      <h2>Per-task breakdown</h2>
+      <p class="workspace-note" style="margin-bottom: 10px;">Click each task to see exactly what every model wrote and which criteria it passed.</p>
+      <div id="task-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>The scoring rubric (identical for every model)</h2>
+      <p class="workspace-note" style="margin-bottom: 10px;">Every mechanical check, per task. No judge model, no vibes — deterministic evaluation only.</p>
+      <div class="ref-list" id="rubric"></div>
+    </div>
+  </main>
+
+  <footer>LLM Bench · deterministic criteria · outputs are judged only by the rules shown above</footer>
+
+  <script type="module" src="app.js?v=8"></script>
+</body>
+</html>
