@@ -1,5 +1,7 @@
 # 🔬 LLM Bench
 
+**[🌐 Open the live app →](https://llm-bench-7btynn-preview.freebuff.page)** — the hosted copy runs the free sample benchmark and the paste-and-grade grader with zero setup.
+
 An LLM benchmarking tool with a principle most tools skip: **every model is graded by the identical, deterministic checklist — no LLM judge, no vibes.**
 
 Run any models you like on the same tasks. Each response goes through a fixed, hand-weighted rubric that produces a mechanical pass/fail per criterion, so comparisons are apples-to-apples and every score is explainable down to the exact missing word.
@@ -10,7 +12,10 @@ Run any models you like on the same tasks. Each response goes through a fixed, h
 |---|---|---|
 | **Built-in samples** | Three canned sample models (precise / wordy / careless) run through the whole engine with zero setup | Free forever, offline |
 | **Paste-and-grade** | Copy any two models' replies (Opus vs Astra, ChatGPT vs Gemini — anything you can access) into two boxes; the identical rubric grades both side by side with pass/fail chips and a winner badge | Free forever, no API |
-| **Real-LLM mode (optional)** | Add any OpenAI-compatible key (OpenRouter gives one free, no credit card) and the live model list flows in — pick real models, they get the identical prompts, the identical scoring | Free-tier models cost $0; your key, your rate limits |
+| **Real-LLM mode (optional)** | Add any OpenAI-compatible OpenAI key (OpenRouter gives one free, no credit card) and the live model list flows in — pick real models, they get the identical prompts, the identical scoring | Free-tier models cost $0; your key, your rate limits |
+
+The live site covers the first two modes. Real-LLM mode needs the local server described
+below, because your API key stays on your own machine.
 
 ## How scoring works
 
