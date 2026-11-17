@@ -196,7 +196,7 @@ $("#run-btn").addEventListener("click", async () => {
     let data;
     try {
       const res = await fetch("api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (res.status === 404) throw new Error("no-api");
+      if (res.status === 404 || res.status === 405) throw new Error("no-api"); // static hosting: no API route
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         $("#run-status").textContent = err.error ? "Error: " + err.error : `Error ${res.status}`;
