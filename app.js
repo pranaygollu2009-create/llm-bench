@@ -1,4 +1,5 @@
 import { evaluate, SUITES } from "./tasks.js";
+import { SAMPLE_MODELS, SAMPLE_OUTPUTS } from "./samples.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) =>
@@ -6,15 +7,79 @@ const esc = (s) =>
 
 const state = { suites: [], suiteId: null, models: new Set(), sampled: new Set(), selected: new Set(), custom: [], running: false };
 
+/* ---------- offline fallbacks (static hosting: no server to call) ---------- */
+function localStatus() {
+  return {
+    suites: SUITES.map(({ id, name, blurb, tasks }) => ({
+      id,
+      name,
+      blurb,
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        prompt: t.prompt,
+        criteria: t.criteria.map(({ label, weight }) => ({ label, weight })),
+      })),
+    })),
+  };
+}
+
+function localRun(suiteId, modelIds) {
+  const suite = SUITES.find((s) => s.id === suiteId);
+  if (!suite) return null;
+  let ids = modelIds.filter((m) => SAMPLE_MODELS.includes(m));
+  if (!ids.length) ids = [...SAMPLE_MODELS];
+
+  const rows = suite.tasks.map((task) => ({
+    taskId: task.id,
+    title: task.title,
+    prompt: task.prompt,
+    cells: ids.map((model) => {
+      const output = SAMPLE_OUTPUTS[task.id]?.[model] ?? "(sample output missing for this task)";
+      const criteria = evaluate(output, task.criteria);
+      const maxW = task.criteria.reduce((s, c) => s + c.weight, 0);
+      const got = criteria.reduce((s, c) => s + (c.pass ? c.weight : 0), 0);
+      return {
+        model,
+        output,
+        latencyMs: 120 + ((model.length * 37) % 800),
+        tokens: 12 + task.id.length,
+        criteria,
+        maxW,
+        got,
+        pct: maxW ? Math.round((got / maxW) * 100) : 0,
+      };
+    }),
+  }));
+
+  const summary = {};
+  for (const model of ids) {
+    const mine = rows.map((r) => r.cells.find((c) => c.model === model));
+    const critAll = mine.flatMap((c) => c.criteria);
+    summary[model] = {
+      runs: mine.length,
+      errors: 0,
+      score: Math.round(mine.reduce((s, c) => s + c.pct, 0) / mine.length),
+      latency: Math.round(mine.reduce((s, c) => s + c.latencyMs, 0) / mine.length),
+      tokens: Math.round(mine.reduce((s, c) => s + (c.tokens || 0), 0) / mine.length),
+      critPassed: critAll.filter((c) => c.pass).length,
+      critTotal: critAll.length,
+      tasksPassed: mine.filter((c) => c.pct === 100).length,
+    };
+  }
+
+  return { suite: { id: suite.id, name: suite.name }, rows, summary, realCalls: 0 };
+}
+
 /* ---------- status + setup card ---------- */
 async function init() {
-  const status = await fetch("/api/status").then((r) => r.json());
+  const status = await fetch("api/status").then((r) => r.json()).catch(localStatus);
   state.suites = status.suites;
   renderSuites();
   renderRubric();
   renderGradeTasks();
 
-  const list = await fetch("/api/models").then((r) => r.json()).catch(() => ({ models: [], source: "none" }));
+  const list = await fetch("api/models").then((r) => r.json()).catch(() => ({ models: SAMPLE_MODELS, source: "built-in", sampled: SAMPLE_MODELS }));
   state.models = new Set(list.models);
   state.sampled = new Set(list.sampled || []);
   const hint = $("#model-hint");
@@ -22,7 +87,7 @@ async function init() {
     if (list.source === "api") {
       hint.textContent = "🔑 Real-LLM mode active — benching live models (e.g. Opus, Astra) uses your API credits; the 3 sample models stay free.";
       hint.style.color = "var(--accent)";
-    } else hint.textContent = "No API key — real-LLM comparison is off. The 3 sample models below are free; add a key in .env to bench live models like Opus and Astra.";
+    } else hint.textContent = "Free sample mode — the 3 sample models run entirely in your browser at zero cost. Benching live models like Opus or Astra needs the local server (node server.js) plus your own API key.";
   }
   $("#run-status").textContent =
     list.source === "api" ? "Real LLM list loaded + free samples — pick any models to compare." :
@@ -128,13 +193,25 @@ $("#run-btn").addEventListener("click", async () => {
   $("#run-status").textContent = "Running — same prompt to every model, then one judge script…";
   try {
     const body = { suiteId: state.suiteId, modelIds: [...state.selected] };
-    const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      $("#run-status").textContent = err.error ? "Error: " + err.error : `Error ${res.status}`;
-      return;
+    let data;
+    try {
+      const res = await fetch("api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (res.status === 404) throw new Error("no-api");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        $("#run-status").textContent = err.error ? "Error: " + err.error : `Error ${res.status}`;
+        return;
+      }
+      data = await res.json();
+    } catch (err) {
+      /* static hosting (GitHub Pages) has no server — score the free samples here instead */
+      if (err.message !== "no-api" && !(err instanceof TypeError)) throw err;
+      data = localRun(state.suiteId, [...state.selected]);
+      if (!data) {
+        $("#run-status").textContent = "Could not run that suite.";
+        return;
+      }
     }
-    const data = await res.json();
     renderResults(data);
     $("#run-status").textContent = data.realCalls ?
       `Done — ${data.realCalls} real API call(s) billed to your key; sample models were free.` :
