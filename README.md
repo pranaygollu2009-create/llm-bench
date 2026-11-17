@@ -1,6 +1,6 @@
 # 🔬 LLM Bench
 
-**[🌐 Open the live app →](https://llm-bench-7btynn-preview.freebuff.page)** — the hosted copy runs the free sample benchmark and the paste-and-grade grader with zero setup.
+**[🌐 Open the live app →](https://llm-bench-7btynn.freebuff.page)** — the hosted copy runs the free sample benchmark and the paste-and-grade grader with zero setup.
 
 An LLM benchmarking tool with a principle most tools skip: **every model is graded by the identical, deterministic checklist — no LLM judge, no vibes.**
 
